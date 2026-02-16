@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Игра - Амстор (Система сохранений)</title>
+    <title>Игра - Амстор (Update System)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -187,11 +187,83 @@
             border: 2px solid #e53e3e;
             border-radius: 15px;
         }
+
+        /* Styles for Update Modal */
+        #update-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .update-box {
+            background: #2d3748;
+            width: 90%;
+            max-width: 350px;
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid #4a5568;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        .progress-container {
+            width: 100%;
+            height: 40px;
+            background: #1a202c;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            display: none; /* Hidden by default */
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: #2b6cb0;
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        .progress-text {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 0.85rem;
+            color: white;
+        }
     </style>
 </head>
 <body>
 
     <div id="incident-msg">Вы не дождались туалет</div>
+
+    <!-- Update Modal -->
+    <div id="update-modal">
+        <div class="update-box">
+            <h2 class="text-xl font-bold mb-2">Обновление доступно!</h2>
+            <p class="text-sm text-blue-400 mb-4">Версия 1.1.0</p>
+            
+            <div class="bg-[#1a202c] rounded-lg p-3 mb-6 text-xs text-gray-300 space-y-2 max-h-40 overflow-y-auto" id="changelog">
+                <p>• Добавлена система нововведений</p>
+                <p>• Улучшена стабильность сохранений</p>
+                <p>• Оптимизация интерфейса</p>
+            </div>
+
+            <button id="update-btn" onclick="startLoadingUpdate()" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-lg font-bold transition-all">
+                Загрузить обновление
+            </button>
+
+            <div id="loading-container" class="progress-container">
+                <div id="load-bar" class="progress-bar"></div>
+                <div id="load-percent" class="progress-text">0%</div>
+            </div>
+        </div>
+    </div>
 
     <div id="game-container">
         <div id="display-area" class="w-full flex justify-center"></div>
@@ -205,9 +277,10 @@
     </nav>
 
     <script>
-        // Начальное состояние игры
+        // Состояние игры
         const initialState = {
             day: 1,
+            version: "1.1.0", // Текущая версия
             stats: {
                 health: 100,
                 happiness: 80,
@@ -226,6 +299,36 @@
 
         let gameState = {};
 
+        // Механика обновления
+        function startLoadingUpdate() {
+            const btn = document.getElementById('update-btn');
+            const container = document.getElementById('loading-container');
+            const bar = document.getElementById('load-bar');
+            const percent = document.getElementById('load-percent');
+
+            btn.style.display = 'none';
+            container.style.display = 'block';
+
+            let progress = 0;
+            const duration = 6000; // 6 секунд
+            const interval = 50;
+            const step = 100 / (duration / interval);
+
+            const timer = setInterval(() => {
+                progress += step;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(timer);
+                    setTimeout(() => {
+                        document.getElementById('update-modal').style.display = 'none';
+                        saveGame(); // Сохраняем после "установки"
+                    }, 500);
+                }
+                bar.style.width = progress + '%';
+                percent.innerText = Math.floor(progress) + '%';
+            }, interval);
+        }
+
         // Функция сохранения
         function saveGame() {
             localStorage.setItem('amstor_game_save', JSON.stringify(gameState));
@@ -237,6 +340,8 @@
             if (saved) {
                 try {
                     gameState = JSON.parse(saved);
+                    // Если версия в сохранении не совпадает с игрой - можно принудительно показать окно
+                    // В данном случае окно показывается один раз за сессию или пока не нажата загрузка
                 } catch (e) {
                     gameState = { ...initialState };
                 }
@@ -245,7 +350,6 @@
             }
         }
 
-        // Функция сброса (начать заново)
         function resetGame() {
             localStorage.removeItem('amstor_game_save');
             location.reload();
@@ -272,21 +376,18 @@
             let penalty = 0;
             if (gameState.stats.hunger <= 0) penalty += 1;
             if (gameState.stats.water <= 0) penalty += 1;
-            
-            if (penalty > 0) {
-                gameState.stats.health = Math.max(0, gameState.stats.health - penalty);
-            }
+            if (penalty > 0) gameState.stats.health = Math.max(0, gameState.stats.health - penalty);
         }
 
         function checkHealthStatus(deathType = "default") {
             if (gameState.stats.health <= 0 || deathType === "eviction") {
                 const display = document.getElementById('display-area');
-                let message = '"Он был хорошим парнем, сиротой, он пытался выжить в жестоком экономическом мире, но жизнь его поглотила"';
+                let message = '"Он был хорошим парнем, сиротой, он пытался выжить в жестоком экономическом мире..."';
                 let title = "ВЫ ПОГИБЛИ";
 
                 if (deathType === "eviction") {
                     title = "ВЫ ВЫСЕЛЕНЫ";
-                    message = '"У него не хватило денег на аренду. Вещи выставили на мороз, а надежда на будущее окончательно угасла в подворотне."';
+                    message = '"У него не хватило денег на аренду. Вещи выставили на мороз..."';
                 }
 
                 display.innerHTML = `
@@ -331,14 +432,8 @@
                     </div>
                     <div class="stats-grid">
                         <div class="stat-card time-card">
-                            <div>
-                                <span class="stat-label">Свободное время</span>
-                                <span class="stat-value text-blue-400 text-lg">${getFormattedTime()}</span>
-                            </div>
-                            <div>
-                                <span class="stat-label">Баланс</span>
-                                <span class="stat-value text-yellow-500">${gameState.money} ₴</span>
-                            </div>
+                            <div><span class="stat-label">Свободное время</span><span class="stat-value text-blue-400 text-lg">${getFormattedTime()}</span></div>
+                            <div><span class="stat-label">Баланс</span><span class="stat-value text-yellow-500">${gameState.money} ₴</span></div>
                         </div>
                         <div class="stat-card"><span class="stat-label">Здоровье</span><span class="stat-value text-green-400">${gameState.stats.health}%</span></div>
                         <div class="stat-card"><span class="stat-label">Счастье</span><span class="stat-value text-yellow-400">${gameState.stats.happiness}%</span></div>
@@ -347,9 +442,6 @@
                         <div class="stat-card"><span class="stat-label">Туалет</span><span class="stat-value text-amber-600">${gameState.stats.toilet}%</span></div>
                         <div class="stat-card"><span class="stat-label">Вода</span><span class="stat-value text-blue-400">${gameState.stats.water}%</span></div>
                     </div>
-                    <div class="mt-8 text-center">
-                        <button onclick="resetGame()" class="text-[10px] text-gray-500 underline uppercase tracking-widest">Сбросить весь прогресс</button>
-                    </div>
                 </div>`;
         }
 
@@ -357,40 +449,18 @@
             const daysLeft = gameState.rentDueDate - gameState.day;
             return `
                 <div class="panel">
-                    <h2 class="text-xl mb-4 text-center font-semibold text-gray-300">Домашний уют</h2>
-                    
+                    <h2 class="text-xl mb-4 text-center font-semibold text-gray-300">Дом</h2>
                     <div class="bg-[#1a202c] border border-blue-500/30 rounded-lg p-3 mb-4 text-xs">
-                        <div class="flex justify-between text-blue-300 mb-1">
-                            <span>Аренда и счета:</span>
-                            <span class="font-bold">12 500 ₴</span>
-                        </div>
-                        <div class="flex justify-between text-gray-400">
-                            <span>Следующая оплата:</span>
-                            <span class="${daysLeft <= 3 ? 'text-red-400 font-bold' : ''}">через ${daysLeft} дн.</span>
-                        </div>
+                        <div class="flex justify-between text-blue-300 mb-1"><span>Аренда:</span><span class="font-bold">12 500 ₴</span></div>
+                        <div class="flex justify-between text-gray-400"><span>До оплаты:</span><span>${daysLeft} дн.</span></div>
                     </div>
-
                     <div class="space-y-3">
                         <div class="item-card">
-                            <div class="flex-1">
-                                <div class="font-bold text-sm">Сходить в туалет</div>
-                                <div class="text-[10px] text-gray-400">20 мин. | Облегчение +2%</div>
-                            </div>
+                            <div class="flex-1"><div class="font-bold text-sm">Туалет</div><div class="text-[10px] text-gray-400">20 мин.</div></div>
                             <button class="btn-action" ${gameState.freeTimeMinutes < 20 ? 'disabled' : ''} onclick="goToilet()">Идти</button>
                         </div>
-                        <div class="border-t border-gray-600 my-2 pt-2"></div>
                         <div class="item-card">
-                            <div class="flex-1">
-                                <div class="font-bold text-sm">Короткий сон (4 ч.)</div>
-                                <div class="text-[10px] text-gray-400">-40% усталости.</div>
-                            </div>
-                            <button class="btn-action" onclick="goToSleep('short')">Сон</button>
-                        </div>
-                        <div class="item-card">
-                            <div class="flex-1">
-                                <div class="font-bold text-sm">Полный сон (8 ч.)</div>
-                                <div class="text-[10px] text-gray-400">-100% усталости, +10% Счастья.</div>
-                            </div>
+                            <div class="flex-1"><div class="font-bold text-sm">Сон (8 ч.)</div><div class="text-[10px] text-gray-400">-100% усталости</div></div>
                             <button class="btn-action bg-indigo-600" onclick="goToSleep('full')">Сон</button>
                         </div>
                     </div>
@@ -399,10 +469,7 @@
 
         function goToilet() {
             if (gameState.freeTimeMinutes < 20) return;
-            
             applyDepletionPenalty();
-            if (checkHealthStatus()) return;
-
             gameState.freeTimeMinutes -= 20;
             gameState.stats.toilet = 0;
             gameState.stats.happiness = Math.min(100, gameState.stats.happiness + 2);
@@ -418,28 +485,17 @@
 
             if (gameState.stats.hunger <= 0) { healthPenalty += 20; happinessPenalty += 30; penaltyText += "Голод. "; }
             if (gameState.stats.water <= 0) { healthPenalty += 30; happinessPenalty += 20; penaltyText += "Жажда. "; }
-            if (gameState.stats.fatigue >= 100) { healthPenalty += 15; penaltyText += "Износ. "; }
             
-            if (type === 'short') {
-                gameState.stats.fatigue = Math.max(0, gameState.stats.fatigue - 40);
-            } else {
-                gameState.stats.fatigue = 0;
-                gameState.stats.happiness = Math.min(100, gameState.stats.happiness + 10);
-            }
-
+            gameState.stats.fatigue = 0;
             gameState.stats.health = Math.max(0, gameState.stats.health - healthPenalty);
-            gameState.stats.happiness = Math.max(0, gameState.stats.happiness - happinessPenalty);
+            gameState.stats.happiness = Math.max(0, gameState.stats.happiness - (happinessPenalty - 10));
             
             gameState.day += 1;
-
             if (gameState.day > gameState.rentDueDate) {
                 if (gameState.money >= gameState.rentAmount) {
                     gameState.money -= gameState.rentAmount;
                     gameState.rentDueDate += 30;
-                    penaltyText = "Списана аренда 12 500 ₴. ";
-                } else {
-                    eviction = true;
-                }
+                } else { eviction = true; }
             }
 
             gameState.freeTimeMinutes = 16 * 60;
@@ -447,50 +503,27 @@
             gameState.stats.water = Math.max(0, gameState.stats.water - 20);
 
             saveGame();
-
             const display = document.getElementById('display-area');
-            display.innerHTML = `
-                <div class="text-center">
-                    <h1 class="text-4xl font-bold text-indigo-400 animate-pulse">Zzz...</h1>
-                    <p class="mt-4 text-red-400 text-xs font-bold">${penaltyText}</p>
-                    <p class="mt-2 text-gray-400 italic">Наступил день ${gameState.day}...</p>
-                </div>`;
+            display.innerHTML = `<div class="text-center"><h1 class="text-4xl font-bold text-indigo-400 animate-pulse">Zzz...</h1></div>`;
             
             setTimeout(() => {
-                if (eviction) {
-                    checkHealthStatus("eviction");
-                } else if (!checkHealthStatus()) {
-                    switchTab(1);
-                }
+                if (eviction) checkHealthStatus("eviction");
+                else if (!checkHealthStatus()) switchTab(1);
             }, 2000);
         }
 
         function renderWork() {
             return `
                 <div class="panel">
-                    <h2 class="text-xl mb-4 text-center font-semibold text-gray-300">Работа в Амстор</h2>
-                    <div class="mb-6">
-                        <label class="stat-label block mb-2">Смена: <span id="hours-val" class="text-white text-lg">6</span> ч.</label>
-                        <input type="range" id="work-range" min="1" max="12" value="6" oninput="updateWorkInfo(this.value)">
-                    </div>
-                    <div class="space-y-2 text-xs border-t border-gray-600 pt-4">
-                        <div class="flex justify-between"><span>Зарплата:</span><span id="info-pay" class="text-green-400">+360 ₴</span></div>
-                        <div class="flex justify-between"><span>Усталость:</span><span id="info-fatigue" class="text-red-400">+48%</span></div>
-                        <div class="flex justify-between"><span>Счастье:</span><span id="info-happiness" class="text-red-400">-18%</span></div>
-                        <div class="flex justify-between"><span>Сытость:</span><span id="info-hunger" class="text-red-400">-24%</span></div>
-                        <div class="flex justify-between"><span>Вода:</span><span id="info-water" class="text-blue-400">-42%</span></div>
-                    </div>
-                    <button id="work-btn" class="bg-green-700 w-full mt-4 py-3 rounded-lg font-bold" onclick="handleWork()">Начать смену</button>
+                    <h2 class="text-xl mb-4 text-center font-semibold text-gray-300">Работа</h2>
+                    <input type="range" id="work-range" min="1" max="12" value="6" oninput="updateWorkInfo(this.value)">
+                    <div id="info-pay" class="text-center text-green-400 font-bold mb-4">+360 ₴</div>
+                    <button id="work-btn" class="bg-green-700 w-full py-3 rounded-lg font-bold" onclick="handleWork()">Начать</button>
                 </div>`;
         }
 
         function updateWorkInfo(val) {
-            document.getElementById('hours-val').innerText = val;
             document.getElementById('info-pay').innerText = `+${val * 60} ₴`;
-            document.getElementById('info-fatigue').innerText = `+${val * 8}%`;
-            document.getElementById('info-happiness').innerText = `-${val * 3}%`;
-            document.getElementById('info-hunger').innerText = `-${val * 4}%`;
-            document.getElementById('info-water').innerText = `-${val * 7}%`;
             document.getElementById('work-btn').disabled = (val * 60) > gameState.freeTimeMinutes;
         }
 
@@ -500,12 +533,10 @@
             
             checkToiletConfusion();
             applyDepletionPenalty();
-
             if (checkHealthStatus()) return;
 
             gameState.money += hours * 60;
             gameState.stats.fatigue = Math.min(100, gameState.stats.fatigue + (hours * 8));
-            gameState.stats.happiness = Math.max(0, gameState.stats.happiness - (hours * 3));
             gameState.stats.hunger = Math.max(0, gameState.stats.hunger - (hours * 4));
             gameState.stats.water = Math.max(0, gameState.stats.water - (hours * 7)); 
             gameState.freeTimeMinutes -= (hours * 60);
@@ -516,74 +547,38 @@
 
         function renderShop() {
             let itemsHtml = '';
-            if (gameState.shopCategory === 'food') {
-                foodMenu.forEach((item, index) => {
-                    const canAfford = gameState.money >= item.price && gameState.freeTimeMinutes >= item.time;
-                    itemsHtml += `
-                        <div class="item-card">
-                            <div class="flex-1 mr-2">
-                                <div class="font-bold text-xs">${item.name}</div>
-                                <div class="text-[9px] text-gray-400">Сыт: +${item.hunger}% | Тул: +${item.toilet}% | ${item.time}м.</div>
-                            </div>
-                            <button class="btn-buy" ${canAfford ? '' : 'disabled'} onclick="buyItem('food', ${index})">${item.price} ₴</button>
-                        </div>`;
-                });
-            } else {
-                drinkMenu.forEach((item, index) => {
-                    const canAfford = gameState.money >= item.price;
-                    itemsHtml += `
-                        <div class="item-card">
-                            <div class="flex-1 mr-2">
-                                <div class="font-bold text-xs">${item.name}</div>
-                                <div class="text-[9px] text-gray-400">Вода: +${item.water}% | Тул: +${item.toilet}% | Счаст: +${item.happiness}%</div>
-                            </div>
-                            <button class="btn-buy" ${canAfford ? '' : 'disabled'} onclick="buyItem('drink', ${index})">${item.price} ₴</button>
-                        </div>`;
-                });
-            }
+            let list = gameState.shopCategory === 'food' ? foodMenu : drinkMenu;
+            list.forEach((item, index) => {
+                const canAfford = gameState.money >= item.price;
+                itemsHtml += `
+                    <div class="item-card">
+                        <div class="flex-1"><div class="font-bold text-xs">${item.name}</div></div>
+                        <button class="btn-buy" ${canAfford ? '' : 'disabled'} onclick="buyItem('${gameState.shopCategory}', ${index})">${item.price} ₴</button>
+                    </div>`;
+            });
 
-            return `
-                <div class="panel">
-                    <div class="flex mb-4 border-b border-gray-600">
-                        <div class="category-tab ${gameState.shopCategory === 'food' ? 'active' : ''}" onclick="setCategory('food')">Еда</div>
-                        <div class="category-tab ${gameState.shopCategory === 'drinks' ? 'active' : ''}" onclick="setCategory('drinks')">Напитки</div>
-                    </div>
-                    <div class="max-h-[350px] overflow-y-auto">
-                        ${itemsHtml}
-                    </div>
-                </div>`;
+            return `<div class="panel">
+                <div class="flex mb-4 border-b border-gray-600">
+                    <div class="category-tab ${gameState.shopCategory === 'food' ? 'active' : ''}" onclick="setCategory('food')">Еда</div>
+                    <div class="category-tab ${gameState.shopCategory === 'drinks' ? 'active' : ''}" onclick="setCategory('drinks')">Вода</div>
+                </div>
+                ${itemsHtml}
+            </div>`;
         }
 
-        function setCategory(cat) {
-            gameState.shopCategory = cat;
-            switchTab(3);
-        }
+        function setCategory(cat) { gameState.shopCategory = cat; switchTab(3); }
 
         function buyItem(type, index) {
-            const list = type === 'food' ? foodMenu : drinkMenu;
-            const item = list[index];
-            const timeCost = item.time || 0;
-
-            if (gameState.money < item.price || gameState.freeTimeMinutes < timeCost) return;
-            
+            const item = type === 'food' ? foodMenu[index] : drinkMenu[index];
+            if (gameState.money < item.price) return;
             checkToiletConfusion();
             applyDepletionPenalty();
-
             if (checkHealthStatus()) return;
 
             gameState.money -= item.price;
-            gameState.freeTimeMinutes -= timeCost;
-
-            if (type === 'food') {
-                gameState.stats.hunger = Math.min(100, gameState.stats.hunger + item.hunger);
-                gameState.stats.toilet = Math.min(100, gameState.stats.toilet + item.toilet);
-                gameState.stats.happiness = Math.min(100, Math.max(0, gameState.stats.happiness + (item.happiness || 0)));
-            } else {
-                gameState.stats.water = Math.min(100, gameState.stats.water + item.water);
-                gameState.stats.toilet = Math.min(100, gameState.stats.toilet + item.toilet);
-                gameState.stats.happiness = Math.min(100, gameState.stats.happiness + item.happiness);
-                gameState.stats.fatigue = Math.min(100, Math.max(0, gameState.stats.fatigue + (item.fatigue || 0)));
-            }
+            if (type === 'food') gameState.stats.hunger = Math.min(100, gameState.stats.hunger + item.hunger);
+            else gameState.stats.water = Math.min(100, gameState.stats.water + item.water);
+            gameState.stats.toilet = Math.min(100, gameState.stats.toilet + item.toilet);
 
             saveGame();
             if (!checkHealthStatus()) switchTab(3);
@@ -596,7 +591,6 @@
             const tabs = [document.getElementById('tab-1'), document.getElementById('tab-2'), document.getElementById('tab-3'), document.getElementById('tab-4')];
             if (tabs[id-1]) tabs[id-1].classList.add('active');
             const display = document.getElementById('display-area');
-            
             if (id === 1) display.innerHTML = renderStats();
             else if (id === 2) { display.innerHTML = renderWork(); updateWorkInfo(6); }
             else if (id === 3) display.innerHTML = renderShop();
