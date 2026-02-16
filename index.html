@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Игра - Амстор (Система сохранений)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #1a202c;
+            color: white;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        #game-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .bottom-nav {
+            background-color: #2d3748;
+            border-top: 1px solid #4a5568;
+            height: 75px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            width: 100%;
+        }
+
+        .nav-item {
+            flex: 1;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+            font-size: 0.9rem;
+            color: #a0aec0;
+        }
+
+        .nav-item:hover {
+            background-color: #4a5568;
+            color: white;
+        }
+
+        .nav-item.active {
+            background-color: #2b6cb0;
+            color: white;
+            font-weight: bold;
+        }
+
+        .stats-container {
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .stat-card {
+            background: #2d3748;
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .time-card {
+            grid-column: span 2;
+            margin-bottom: 15px;
+            border: 1px solid #4a5568;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 25px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            display: block;
+            margin-top: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #a0aec0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .panel {
+            background: #2d3748;
+            padding: 20px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .item-card {
+            background: #1a202c;
+            border: 1px solid #4a5568;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .btn-buy, .btn-action {
+            background-color: #2b6cb0;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+
+        .btn-buy:disabled, .btn-action:disabled {
+            background-color: #4a5568;
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .category-tab {
+            flex: 1;
+            text-align: center;
+            padding: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            color: #a0aec0;
+        }
+
+        .category-tab.active {
+            border-bottom-color: #2b6cb0;
+            color: white;
+            font-weight: bold;
+        }
+
+        input[type=range] {
+            width: 100%;
+            margin: 15px 0;
+            cursor: pointer;
+        }
+
+        #incident-msg {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #e53e3e;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            z-index: 100;
+            display: none;
+            animation: bounce 0.5s ease;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translate(-50%, 0); }
+            50% { transform: translate(-50%, -10px); }
+        }
+
+        .death-screen {
+            text-align: center;
+            max-width: 320px;
+            padding: 30px;
+            background: #2d3748;
+            border: 2px solid #e53e3e;
+            border-radius: 15px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="incident-msg">Вы не дождались туалет</div>
+
+    <div id="game-container">
+        <div id="display-area" class="w-full flex justify-center"></div>
+    </div>
+
+    <nav class="bottom-nav">
+        <div id="tab-1" class="nav-item" onclick="switchTab(1)">Профиль</div>
+        <div id="tab-2" class="nav-item" onclick="switchTab(2)">Работа</div>
+        <div id="tab-3" class="nav-item" onclick="switchTab(3)">Магазин</div>
+        <div id="tab-4" class="nav-item" onclick="switchTab(4)">Дом</div>
+    </nav>
+
+    <script>
+        // Начальное состояние игры
+        const initialState = {
+            day: 1,
+            stats: {
+                health: 100,
+                happiness: 80,
+                hunger: 50,
+                fatigue: 10,
+                toilet: 0,
+                water: 90
+            },
+            money: 500,
+            freeTimeMinutes: 16 * 60, 
+            currentTab: 1,
+            shopCategory: 'food',
+            rentDueDate: 30,
+            rentAmount: 12500
+        };
+
+        let gameState = {};
+
+        // Функция сохранения
+        function saveGame() {
+            localStorage.setItem('amstor_game_save', JSON.stringify(gameState));
+        }
+
+        // Функция загрузки
+        function loadGame() {
+            const saved = localStorage.getItem('amstor_game_save');
+            if (saved) {
+                try {
+                    gameState = JSON.parse(saved);
+                } catch (e) {
+                    gameState = { ...initialState };
+                }
+            } else {
+                gameState = { ...initialState };
+            }
+        }
+
+        // Функция сброса (начать заново)
+        function resetGame() {
+            localStorage.removeItem('amstor_game_save');
+            location.reload();
+        }
+
+        const foodMenu = [
+            { name: "Лапша б/п", price: 15, hunger: 15, toilet: 5, happiness: -5, time: 20 },
+            { name: "Батон и кефир", price: 45, hunger: 30, toilet: 15, happiness: 2, time: 30 },
+            { name: "Пельмени", price: 120, hunger: 55, toilet: 15, happiness: 10, time: 40 },
+            { name: "Энергетик и сухарики", price: 70, hunger: 10, toilet: 20, happiness: 25, time: 15 },
+            { name: "Курица-гриль", price: 210, hunger: 85, toilet: 20, happiness: 20, time: 50 }
+        ];
+
+        const drinkMenu = [
+            { name: "Минералка (0.5л)", price: 12, water: 35, toilet: 15, happiness: 2, fatigue: 0 },
+            { name: "Кофе", price: 25, water: 15, toilet: 25, happiness: 10, fatigue: -5 },
+            { name: "Холодный чай", price: 32, water: 50, toilet: 20, happiness: 12, fatigue: 0 },
+            { name: "Сладкая газировка", price: 40, water: 30, toilet: 25, happiness: 20, fatigue: 0 },
+            { name: "Лимонад (домашний)", price: 55, water: 70, toilet: 35, happiness: 15, fatigue: 0 },
+            { name: "Энергетик", price: 55, water: 20, toilet: 30, happiness: 25, fatigue: -15 }
+        ];
+
+        function applyDepletionPenalty() {
+            let penalty = 0;
+            if (gameState.stats.hunger <= 0) penalty += 1;
+            if (gameState.stats.water <= 0) penalty += 1;
+            
+            if (penalty > 0) {
+                gameState.stats.health = Math.max(0, gameState.stats.health - penalty);
+            }
+        }
+
+        function checkHealthStatus(deathType = "default") {
+            if (gameState.stats.health <= 0 || deathType === "eviction") {
+                const display = document.getElementById('display-area');
+                let message = '"Он был хорошим парнем, сиротой, он пытался выжить в жестоком экономическом мире, но жизнь его поглотила"';
+                let title = "ВЫ ПОГИБЛИ";
+
+                if (deathType === "eviction") {
+                    title = "ВЫ ВЫСЕЛЕНЫ";
+                    message = '"У него не хватило денег на аренду. Вещи выставили на мороз, а надежда на будущее окончательно угасла в подворотне."';
+                }
+
+                display.innerHTML = `
+                    <div class="death-screen">
+                        <h1 class="text-2xl font-bold text-red-500 mb-4">${title}</h1>
+                        <p class="text-sm text-gray-300 italic mb-6">${message}</p>
+                        <button onclick="resetGame()" class="bg-white text-black font-bold py-2 px-6 rounded-full hover:bg-gray-200 transition">
+                            Начать сначала
+                        </button>
+                    </div>`;
+                localStorage.removeItem('amstor_game_save');
+                return true;
+            }
+            return false;
+        }
+
+        function checkToiletConfusion() {
+            if (gameState.stats.toilet >= 100) {
+                gameState.stats.toilet = 0;
+                gameState.stats.happiness = Math.max(0, gameState.stats.happiness - 50);
+                const msg = document.getElementById('incident-msg');
+                msg.style.display = 'block';
+                setTimeout(() => { msg.style.display = 'none'; }, 3000);
+                saveGame();
+                return true;
+            }
+            return false;
+        }
+
+        function getFormattedTime() {
+            const h = Math.floor(gameState.freeTimeMinutes / 60);
+            const m = gameState.freeTimeMinutes % 60;
+            return `${h} ч. ${m} мин.`;
+        }
+
+        function renderStats() {
+            return `
+                <div class="stats-container">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-semibold text-gray-300">Профиль</h2>
+                        <span class="bg-blue-900 text-blue-200 text-xs px-3 py-1 rounded-full font-bold">ДЕНЬ ${gameState.day}</span>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-card time-card">
+                            <div>
+                                <span class="stat-label">Свободное время</span>
+                                <span class="stat-value text-blue-400 text-lg">${getFormattedTime()}</span>
+                            </div>
+                            <div>
+                                <span class="stat-label">Баланс</span>
+                                <span class="stat-value text-yellow-500">${gameState.money} ₴</span>
+                            </div>
+                        </div>
+                        <div class="stat-card"><span class="stat-label">Здоровье</span><span class="stat-value text-green-400">${gameState.stats.health}%</span></div>
+                        <div class="stat-card"><span class="stat-label">Счастье</span><span class="stat-value text-yellow-400">${gameState.stats.happiness}%</span></div>
+                        <div class="stat-card"><span class="stat-label">Сытость</span><span class="stat-value text-orange-400">${gameState.stats.hunger}%</span></div>
+                        <div class="stat-card"><span class="stat-label">Усталость</span><span class="stat-value text-purple-400">${gameState.stats.fatigue}%</span></div>
+                        <div class="stat-card"><span class="stat-label">Туалет</span><span class="stat-value text-amber-600">${gameState.stats.toilet}%</span></div>
+                        <div class="stat-card"><span class="stat-label">Вода</span><span class="stat-value text-blue-400">${gameState.stats.water}%</span></div>
+                    </div>
+                    <div class="mt-8 text-center">
+                        <button onclick="resetGame()" class="text-[10px] text-gray-500 underline uppercase tracking-widest">Сбросить весь прогресс</button>
+                    </div>
+                </div>`;
+        }
+
+        function renderHome() {
+            const daysLeft = gameState.rentDueDate - gameState.day;
+            return `
+                <div class="panel">
+                    <h2 class="text-xl mb-4 text-center font-semibold text-gray-300">Домашний уют</h2>
+                    
+                    <div class="bg-[#1a202c] border border-blue-500/30 rounded-lg p-3 mb-4 text-xs">
+                        <div class="flex justify-between text-blue-300 mb-1">
+                            <span>Аренда и счета:</span>
+                            <span class="font-bold">12 500 ₴</span>
+                        </div>
+                        <div class="flex justify-between text-gray-400">
+                            <span>Следующая оплата:</span>
+                            <span class="${daysLeft <= 3 ? 'text-red-400 font-bold' : ''}">через ${daysLeft} дн.</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="item-card">
+                            <div class="flex-1">
+                                <div class="font-bold text-sm">Сходить в туалет</div>
+                                <div class="text-[10px] text-gray-400">20 мин. | Облегчение +2%</div>
+                            </div>
+                            <button class="btn-action" ${gameState.freeTimeMinutes < 20 ? 'disabled' : ''} onclick="goToilet()">Идти</button>
+                        </div>
+                        <div class="border-t border-gray-600 my-2 pt-2"></div>
+                        <div class="item-card">
+                            <div class="flex-1">
+                                <div class="font-bold text-sm">Короткий сон (4 ч.)</div>
+                                <div class="text-[10px] text-gray-400">-40% усталости.</div>
+                            </div>
+                            <button class="btn-action" onclick="goToSleep('short')">Сон</button>
+                        </div>
+                        <div class="item-card">
+                            <div class="flex-1">
+                                <div class="font-bold text-sm">Полный сон (8 ч.)</div>
+                                <div class="text-[10px] text-gray-400">-100% усталости, +10% Счастья.</div>
+                            </div>
+                            <button class="btn-action bg-indigo-600" onclick="goToSleep('full')">Сон</button>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        function goToilet() {
+            if (gameState.freeTimeMinutes < 20) return;
+            
+            applyDepletionPenalty();
+            if (checkHealthStatus()) return;
+
+            gameState.freeTimeMinutes -= 20;
+            gameState.stats.toilet = 0;
+            gameState.stats.happiness = Math.min(100, gameState.stats.happiness + 2);
+            saveGame();
+            switchTab(4);
+        }
+
+        function goToSleep(type) {
+            let penaltyText = "";
+            let healthPenalty = 0;
+            let happinessPenalty = 0;
+            let eviction = false;
+
+            if (gameState.stats.hunger <= 0) { healthPenalty += 20; happinessPenalty += 30; penaltyText += "Голод. "; }
+            if (gameState.stats.water <= 0) { healthPenalty += 30; happinessPenalty += 20; penaltyText += "Жажда. "; }
+            if (gameState.stats.fatigue >= 100) { healthPenalty += 15; penaltyText += "Износ. "; }
+            
+            if (type === 'short') {
+                gameState.stats.fatigue = Math.max(0, gameState.stats.fatigue - 40);
+            } else {
+                gameState.stats.fatigue = 0;
+                gameState.stats.happiness = Math.min(100, gameState.stats.happiness + 10);
+            }
+
+            gameState.stats.health = Math.max(0, gameState.stats.health - healthPenalty);
+            gameState.stats.happiness = Math.max(0, gameState.stats.happiness - happinessPenalty);
+            
+            gameState.day += 1;
+
+            if (gameState.day > gameState.rentDueDate) {
+                if (gameState.money >= gameState.rentAmount) {
+                    gameState.money -= gameState.rentAmount;
+                    gameState.rentDueDate += 30;
+                    penaltyText = "Списана аренда 12 500 ₴. ";
+                } else {
+                    eviction = true;
+                }
+            }
+
+            gameState.freeTimeMinutes = 16 * 60;
+            gameState.stats.hunger = Math.max(0, gameState.stats.hunger - 15);
+            gameState.stats.water = Math.max(0, gameState.stats.water - 20);
+
+            saveGame();
+
+            const display = document.getElementById('display-area');
+            display.innerHTML = `
+                <div class="text-center">
+                    <h1 class="text-4xl font-bold text-indigo-400 animate-pulse">Zzz...</h1>
+                    <p class="mt-4 text-red-400 text-xs font-bold">${penaltyText}</p>
+                    <p class="mt-2 text-gray-400 italic">Наступил день ${gameState.day}...</p>
+                </div>`;
+            
+            setTimeout(() => {
+                if (eviction) {
+                    checkHealthStatus("eviction");
+                } else if (!checkHealthStatus()) {
+                    switchTab(1);
+                }
+            }, 2000);
+        }
+
+        function renderWork() {
+            return `
+                <div class="panel">
+                    <h2 class="text-xl mb-4 text-center font-semibold text-gray-300">Работа в Амстор</h2>
+                    <div class="mb-6">
+                        <label class="stat-label block mb-2">Смена: <span id="hours-val" class="text-white text-lg">6</span> ч.</label>
+                        <input type="range" id="work-range" min="1" max="12" value="6" oninput="updateWorkInfo(this.value)">
+                    </div>
+                    <div class="space-y-2 text-xs border-t border-gray-600 pt-4">
+                        <div class="flex justify-between"><span>Зарплата:</span><span id="info-pay" class="text-green-400">+360 ₴</span></div>
+                        <div class="flex justify-between"><span>Усталость:</span><span id="info-fatigue" class="text-red-400">+48%</span></div>
+                        <div class="flex justify-between"><span>Счастье:</span><span id="info-happiness" class="text-red-400">-18%</span></div>
+                        <div class="flex justify-between"><span>Сытость:</span><span id="info-hunger" class="text-red-400">-24%</span></div>
+                        <div class="flex justify-between"><span>Вода:</span><span id="info-water" class="text-blue-400">-42%</span></div>
+                    </div>
+                    <button id="work-btn" class="bg-green-700 w-full mt-4 py-3 rounded-lg font-bold" onclick="handleWork()">Начать смену</button>
+                </div>`;
+        }
+
+        function updateWorkInfo(val) {
+            document.getElementById('hours-val').innerText = val;
+            document.getElementById('info-pay').innerText = `+${val * 60} ₴`;
+            document.getElementById('info-fatigue').innerText = `+${val * 8}%`;
+            document.getElementById('info-happiness').innerText = `-${val * 3}%`;
+            document.getElementById('info-hunger').innerText = `-${val * 4}%`;
+            document.getElementById('info-water').innerText = `-${val * 7}%`;
+            document.getElementById('work-btn').disabled = (val * 60) > gameState.freeTimeMinutes;
+        }
+
+        function handleWork() {
+            const hours = parseInt(document.getElementById('work-range').value);
+            if ((hours * 60) > gameState.freeTimeMinutes) return;
+            
+            checkToiletConfusion();
+            applyDepletionPenalty();
+
+            if (checkHealthStatus()) return;
+
+            gameState.money += hours * 60;
+            gameState.stats.fatigue = Math.min(100, gameState.stats.fatigue + (hours * 8));
+            gameState.stats.happiness = Math.max(0, gameState.stats.happiness - (hours * 3));
+            gameState.stats.hunger = Math.max(0, gameState.stats.hunger - (hours * 4));
+            gameState.stats.water = Math.max(0, gameState.stats.water - (hours * 7)); 
+            gameState.freeTimeMinutes -= (hours * 60);
+            
+            saveGame();
+            if (!checkHealthStatus()) switchTab(1);
+        }
+
+        function renderShop() {
+            let itemsHtml = '';
+            if (gameState.shopCategory === 'food') {
+                foodMenu.forEach((item, index) => {
+                    const canAfford = gameState.money >= item.price && gameState.freeTimeMinutes >= item.time;
+                    itemsHtml += `
+                        <div class="item-card">
+                            <div class="flex-1 mr-2">
+                                <div class="font-bold text-xs">${item.name}</div>
+                                <div class="text-[9px] text-gray-400">Сыт: +${item.hunger}% | Тул: +${item.toilet}% | ${item.time}м.</div>
+                            </div>
+                            <button class="btn-buy" ${canAfford ? '' : 'disabled'} onclick="buyItem('food', ${index})">${item.price} ₴</button>
+                        </div>`;
+                });
+            } else {
+                drinkMenu.forEach((item, index) => {
+                    const canAfford = gameState.money >= item.price;
+                    itemsHtml += `
+                        <div class="item-card">
+                            <div class="flex-1 mr-2">
+                                <div class="font-bold text-xs">${item.name}</div>
+                                <div class="text-[9px] text-gray-400">Вода: +${item.water}% | Тул: +${item.toilet}% | Счаст: +${item.happiness}%</div>
+                            </div>
+                            <button class="btn-buy" ${canAfford ? '' : 'disabled'} onclick="buyItem('drink', ${index})">${item.price} ₴</button>
+                        </div>`;
+                });
+            }
+
+            return `
+                <div class="panel">
+                    <div class="flex mb-4 border-b border-gray-600">
+                        <div class="category-tab ${gameState.shopCategory === 'food' ? 'active' : ''}" onclick="setCategory('food')">Еда</div>
+                        <div class="category-tab ${gameState.shopCategory === 'drinks' ? 'active' : ''}" onclick="setCategory('drinks')">Напитки</div>
+                    </div>
+                    <div class="max-h-[350px] overflow-y-auto">
+                        ${itemsHtml}
+                    </div>
+                </div>`;
+        }
+
+        function setCategory(cat) {
+            gameState.shopCategory = cat;
+            switchTab(3);
+        }
+
+        function buyItem(type, index) {
+            const list = type === 'food' ? foodMenu : drinkMenu;
+            const item = list[index];
+            const timeCost = item.time || 0;
+
+            if (gameState.money < item.price || gameState.freeTimeMinutes < timeCost) return;
+            
+            checkToiletConfusion();
+            applyDepletionPenalty();
+
+            if (checkHealthStatus()) return;
+
+            gameState.money -= item.price;
+            gameState.freeTimeMinutes -= timeCost;
+
+            if (type === 'food') {
+                gameState.stats.hunger = Math.min(100, gameState.stats.hunger + item.hunger);
+                gameState.stats.toilet = Math.min(100, gameState.stats.toilet + item.toilet);
+                gameState.stats.happiness = Math.min(100, Math.max(0, gameState.stats.happiness + (item.happiness || 0)));
+            } else {
+                gameState.stats.water = Math.min(100, gameState.stats.water + item.water);
+                gameState.stats.toilet = Math.min(100, gameState.stats.toilet + item.toilet);
+                gameState.stats.happiness = Math.min(100, gameState.stats.happiness + item.happiness);
+                gameState.stats.fatigue = Math.min(100, Math.max(0, gameState.stats.fatigue + (item.fatigue || 0)));
+            }
+
+            saveGame();
+            if (!checkHealthStatus()) switchTab(3);
+        }
+
+        function switchTab(id) {
+            if (gameState.stats.health <= 0) return;
+            gameState.currentTab = id;
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            const tabs = [document.getElementById('tab-1'), document.getElementById('tab-2'), document.getElementById('tab-3'), document.getElementById('tab-4')];
+            if (tabs[id-1]) tabs[id-1].classList.add('active');
+            const display = document.getElementById('display-area');
+            
+            if (id === 1) display.innerHTML = renderStats();
+            else if (id === 2) { display.innerHTML = renderWork(); updateWorkInfo(6); }
+            else if (id === 3) display.innerHTML = renderShop();
+            else if (id === 4) display.innerHTML = renderHome();
+        }
+
+        window.onload = () => {
+            loadGame();
+            switchTab(1);
+        };
+    </script>
+</body>
+</html>
