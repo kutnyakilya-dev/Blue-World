@@ -169,14 +169,9 @@
             padding: 10px 20px;
             border-radius: 8px;
             font-weight: bold;
-            z-index: 100;
+            z-index: 1100;
             display: none;
-            animation: bounce 0.5s ease;
-        }
-
-        @keyframes bounce {
-            0%, 100% { transform: translate(-50%, 0); }
-            50% { transform: translate(-50%, -10px); }
+            text-align: center;
         }
 
         .death-screen {
@@ -188,15 +183,15 @@
             border-radius: 15px;
         }
 
-        /* Styles for Update Modal */
+        /* Update Modal */
         #update-modal {
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.85);
-            display: flex;
+            background: rgba(0,0,0,0.9);
+            display: none;
             justify-content: center;
             align-items: center;
-            z-index: 1000;
+            z-index: 2000;
         }
 
         .update-box {
@@ -206,17 +201,16 @@
             border-radius: 16px;
             padding: 24px;
             border: 1px solid #4a5568;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
         }
 
         .progress-container {
             width: 100%;
-            height: 40px;
+            height: 44px;
             background: #1a202c;
             border-radius: 8px;
             overflow: hidden;
             position: relative;
-            display: none; /* Hidden by default */
+            display: none;
         }
 
         .progress-bar {
@@ -240,22 +234,22 @@
 </head>
 <body>
 
-    <div id="incident-msg">Вы не дождались туалет</div>
+    <div id="incident-msg"></div>
 
-    <!-- Update Modal -->
     <div id="update-modal">
         <div class="update-box">
-            <h2 class="text-xl font-bold mb-2">Обновление доступно!</h2>
-            <p class="text-sm text-blue-400 mb-4">Версия 1.1.0</p>
+            <h2 class="text-xl font-bold mb-1">Доступно обновление!</h2>
+            <p id="update-version-text" class="text-sm text-blue-400 mb-4">v1.1.1</p>
             
-            <div class="bg-[#1a202c] rounded-lg p-3 mb-6 text-xs text-gray-300 space-y-2 max-h-40 overflow-y-auto" id="changelog">
-                <p>• Добавлена система нововведений</p>
-                <p>• Улучшена стабильность сохранений</p>
-                <p>• Оптимизация интерфейса</p>
+            <div class="bg-[#1a202c] rounded-lg p-3 mb-6 text-xs text-gray-300 space-y-2 max-h-48 overflow-y-auto" id="changelog-list">
+                <p>• Механика штрафов за голод/жажду</p>
+                <p>• Механика «Конфуза» (туалет)</p>
+                <p>• Урон от переутомления</p>
+                <p>• Выбор типа сна: Короткий или Полный</p>
             </div>
 
-            <button id="update-btn" onclick="startLoadingUpdate()" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-lg font-bold transition-all">
-                Загрузить обновление
+            <button id="update-btn" onclick="runUpdateLoading()" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-lg font-bold transition-all">
+                Загрузить файлы
             </button>
 
             <div id="loading-container" class="progress-container">
@@ -277,18 +271,12 @@
     </nav>
 
     <script>
-        // Состояние игры
+        const GAME_VERSION = "1.1.1";
+
         const initialState = {
             day: 1,
-            version: "1.1.0", // Текущая версия
-            stats: {
-                health: 100,
-                happiness: 80,
-                hunger: 50,
-                fatigue: 10,
-                toilet: 0,
-                water: 90
-            },
+            lastPlayedVersion: "0.0.0",
+            stats: { health: 100, happiness: 80, hunger: 50, fatigue: 10, toilet: 0, water: 90 },
             money: 500,
             freeTimeMinutes: 16 * 60, 
             currentTab: 1,
@@ -298,62 +286,6 @@
         };
 
         let gameState = {};
-
-        // Механика обновления
-        function startLoadingUpdate() {
-            const btn = document.getElementById('update-btn');
-            const container = document.getElementById('loading-container');
-            const bar = document.getElementById('load-bar');
-            const percent = document.getElementById('load-percent');
-
-            btn.style.display = 'none';
-            container.style.display = 'block';
-
-            let progress = 0;
-            const duration = 6000; // 6 секунд
-            const interval = 50;
-            const step = 100 / (duration / interval);
-
-            const timer = setInterval(() => {
-                progress += step;
-                if (progress >= 100) {
-                    progress = 100;
-                    clearInterval(timer);
-                    setTimeout(() => {
-                        document.getElementById('update-modal').style.display = 'none';
-                        saveGame(); // Сохраняем после "установки"
-                    }, 500);
-                }
-                bar.style.width = progress + '%';
-                percent.innerText = Math.floor(progress) + '%';
-            }, interval);
-        }
-
-        // Функция сохранения
-        function saveGame() {
-            localStorage.setItem('amstor_game_save', JSON.stringify(gameState));
-        }
-
-        // Функция загрузки
-        function loadGame() {
-            const saved = localStorage.getItem('amstor_game_save');
-            if (saved) {
-                try {
-                    gameState = JSON.parse(saved);
-                    // Если версия в сохранении не совпадает с игрой - можно принудительно показать окно
-                    // В данном случае окно показывается один раз за сессию или пока не нажата загрузка
-                } catch (e) {
-                    gameState = { ...initialState };
-                }
-            } else {
-                gameState = { ...initialState };
-            }
-        }
-
-        function resetGame() {
-            localStorage.removeItem('amstor_game_save');
-            location.reload();
-        }
 
         const foodMenu = [
             { name: "Лапша б/п", price: 15, hunger: 15, toilet: 5, happiness: -5, time: 20 },
@@ -368,62 +300,108 @@
             { name: "Кофе", price: 25, water: 15, toilet: 25, happiness: 10, fatigue: -5 },
             { name: "Холодный чай", price: 32, water: 50, toilet: 20, happiness: 12, fatigue: 0 },
             { name: "Сладкая газировка", price: 40, water: 30, toilet: 25, happiness: 20, fatigue: 0 },
-            { name: "Лимонад (домашний)", price: 55, water: 70, toilet: 35, happiness: 15, fatigue: 0 },
+            { name: "Лимонад", price: 55, water: 70, toilet: 35, happiness: 15, fatigue: 0 },
             { name: "Энергетик", price: 55, water: 20, toilet: 30, happiness: 25, fatigue: -15 }
         ];
 
+        function checkUpdate() {
+            if (gameState.lastPlayedVersion !== GAME_VERSION) {
+                document.getElementById('update-modal').style.display = 'flex';
+                document.getElementById('update-version-text').innerText = `v${GAME_VERSION}`;
+            }
+        }
+
+        function runUpdateLoading() {
+            const btn = document.getElementById('update-btn');
+            const container = document.getElementById('loading-container');
+            const bar = document.getElementById('load-bar');
+            const percent = document.getElementById('load-percent');
+
+            btn.style.display = 'none';
+            container.style.display = 'block';
+
+            let progress = 0;
+            const duration = 6000;
+            const step = 100 / (duration / 50);
+
+            const timer = setInterval(() => {
+                progress += step;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(timer);
+                    gameState.lastPlayedVersion = GAME_VERSION;
+                    saveGame();
+                    setTimeout(() => {
+                        document.getElementById('update-modal').style.display = 'none';
+                    }, 500);
+                }
+                bar.style.width = progress + '%';
+                percent.innerText = Math.floor(progress) + '%';
+            }, 50);
+        }
+
+        function showMessage(text) {
+            const msg = document.getElementById('incident-msg');
+            msg.innerText = text;
+            msg.style.display = 'block';
+            setTimeout(() => { msg.style.display = 'none'; }, 3000);
+        }
+
+        function saveGame() {
+            localStorage.setItem('amstor_game_save', JSON.stringify(gameState));
+        }
+
+        function loadGame() {
+            const saved = localStorage.getItem('amstor_game_save');
+            if (saved) {
+                gameState = JSON.parse(saved);
+            } else {
+                gameState = { ...initialState };
+            }
+        }
+
         function applyDepletionPenalty() {
-            let penalty = 0;
-            if (gameState.stats.hunger <= 0) penalty += 1;
-            if (gameState.stats.water <= 0) penalty += 1;
-            if (penalty > 0) gameState.stats.health = Math.max(0, gameState.stats.health - penalty);
+            if (gameState.stats.hunger <= 0 || gameState.stats.water <= 0) {
+                gameState.stats.health = Math.max(0, gameState.stats.health - 1);
+                return true;
+            }
+            return false;
+        }
+
+        function checkToiletIncident() {
+            if (gameState.stats.toilet >= 100) {
+                gameState.stats.toilet = 0;
+                gameState.stats.happiness = Math.max(0, gameState.stats.happiness - 50);
+                showMessage("Произошел «Конфуз»! Счастье -50%");
+                return true;
+            }
+            return false;
         }
 
         function checkHealthStatus(deathType = "default") {
             if (gameState.stats.health <= 0 || deathType === "eviction") {
                 const display = document.getElementById('display-area');
-                let message = '"Он был хорошим парнем, сиротой, он пытался выжить в жестоком экономическом мире..."';
-                let title = "ВЫ ПОГИБЛИ";
-
-                if (deathType === "eviction") {
-                    title = "ВЫ ВЫСЕЛЕНЫ";
-                    message = '"У него не хватило денег на аренду. Вещи выставили на мороз..."';
-                }
-
+                let message = deathType === "eviction" ? '"У него не хватило денег на аренду..."' : '"Мир оказался слишком суров..."';
+                let title = deathType === "eviction" ? "ВЫ ВЫСЕЛЕНЫ" : "ВЫ ПОГИБЛИ";
                 display.innerHTML = `
                     <div class="death-screen">
                         <h1 class="text-2xl font-bold text-red-500 mb-4">${title}</h1>
                         <p class="text-sm text-gray-300 italic mb-6">${message}</p>
-                        <button onclick="resetGame()" class="bg-white text-black font-bold py-2 px-6 rounded-full hover:bg-gray-200 transition">
-                            Начать сначала
-                        </button>
+                        <button onclick="resetGame()" class="bg-white text-black font-bold py-2 px-6 rounded-full hover:bg-gray-200 transition">Заново</button>
                     </div>`;
-                localStorage.removeItem('amstor_game_save');
                 return true;
             }
             return false;
         }
 
-        function checkToiletConfusion() {
-            if (gameState.stats.toilet >= 100) {
-                gameState.stats.toilet = 0;
-                gameState.stats.happiness = Math.max(0, gameState.stats.happiness - 50);
-                const msg = document.getElementById('incident-msg');
-                msg.style.display = 'block';
-                setTimeout(() => { msg.style.display = 'none'; }, 3000);
-                saveGame();
-                return true;
-            }
-            return false;
-        }
-
-        function getFormattedTime() {
-            const h = Math.floor(gameState.freeTimeMinutes / 60);
-            const m = gameState.freeTimeMinutes % 60;
-            return `${h} ч. ${m} мин.`;
+        function resetGame() {
+            localStorage.removeItem('amstor_game_save');
+            location.reload();
         }
 
         function renderStats() {
+            const h = Math.floor(gameState.freeTimeMinutes / 60);
+            const m = gameState.freeTimeMinutes % 60;
             return `
                 <div class="stats-container">
                     <div class="flex justify-between items-center mb-6">
@@ -432,7 +410,7 @@
                     </div>
                     <div class="stats-grid">
                         <div class="stat-card time-card">
-                            <div><span class="stat-label">Свободное время</span><span class="stat-value text-blue-400 text-lg">${getFormattedTime()}</span></div>
+                            <div><span class="stat-label">Свободное время</span><span class="stat-value text-blue-400 text-lg">${h} ч. ${m} мин.</span></div>
                             <div><span class="stat-label">Баланс</span><span class="stat-value text-yellow-500">${gameState.money} ₴</span></div>
                         </div>
                         <div class="stat-card"><span class="stat-label">Здоровье</span><span class="stat-value text-green-400">${gameState.stats.health}%</span></div>
@@ -445,101 +423,43 @@
                 </div>`;
         }
 
-        function renderHome() {
-            const daysLeft = gameState.rentDueDate - gameState.day;
-            return `
-                <div class="panel">
-                    <h2 class="text-xl mb-4 text-center font-semibold text-gray-300">Дом</h2>
-                    <div class="bg-[#1a202c] border border-blue-500/30 rounded-lg p-3 mb-4 text-xs">
-                        <div class="flex justify-between text-blue-300 mb-1"><span>Аренда:</span><span class="font-bold">12 500 ₴</span></div>
-                        <div class="flex justify-between text-gray-400"><span>До оплаты:</span><span>${daysLeft} дн.</span></div>
-                    </div>
-                    <div class="space-y-3">
-                        <div class="item-card">
-                            <div class="flex-1"><div class="font-bold text-sm">Туалет</div><div class="text-[10px] text-gray-400">20 мин.</div></div>
-                            <button class="btn-action" ${gameState.freeTimeMinutes < 20 ? 'disabled' : ''} onclick="goToilet()">Идти</button>
-                        </div>
-                        <div class="item-card">
-                            <div class="flex-1"><div class="font-bold text-sm">Сон (8 ч.)</div><div class="text-[10px] text-gray-400">-100% усталости</div></div>
-                            <button class="btn-action bg-indigo-600" onclick="goToSleep('full')">Сон</button>
-                        </div>
-                    </div>
-                </div>`;
-        }
-
-        function goToilet() {
-            if (gameState.freeTimeMinutes < 20) return;
-            applyDepletionPenalty();
-            gameState.freeTimeMinutes -= 20;
-            gameState.stats.toilet = 0;
-            gameState.stats.happiness = Math.min(100, gameState.stats.happiness + 2);
-            saveGame();
-            switchTab(4);
-        }
-
-        function goToSleep(type) {
-            let penaltyText = "";
-            let healthPenalty = 0;
-            let happinessPenalty = 0;
-            let eviction = false;
-
-            if (gameState.stats.hunger <= 0) { healthPenalty += 20; happinessPenalty += 30; penaltyText += "Голод. "; }
-            if (gameState.stats.water <= 0) { healthPenalty += 30; happinessPenalty += 20; penaltyText += "Жажда. "; }
-            
-            gameState.stats.fatigue = 0;
-            gameState.stats.health = Math.max(0, gameState.stats.health - healthPenalty);
-            gameState.stats.happiness = Math.max(0, gameState.stats.happiness - (happinessPenalty - 10));
-            
-            gameState.day += 1;
-            if (gameState.day > gameState.rentDueDate) {
-                if (gameState.money >= gameState.rentAmount) {
-                    gameState.money -= gameState.rentAmount;
-                    gameState.rentDueDate += 30;
-                } else { eviction = true; }
-            }
-
-            gameState.freeTimeMinutes = 16 * 60;
-            gameState.stats.hunger = Math.max(0, gameState.stats.hunger - 15);
-            gameState.stats.water = Math.max(0, gameState.stats.water - 20);
-
-            saveGame();
-            const display = document.getElementById('display-area');
-            display.innerHTML = `<div class="text-center"><h1 class="text-4xl font-bold text-indigo-400 animate-pulse">Zzz...</h1></div>`;
-            
-            setTimeout(() => {
-                if (eviction) checkHealthStatus("eviction");
-                else if (!checkHealthStatus()) switchTab(1);
-            }, 2000);
-        }
-
         function renderWork() {
             return `
                 <div class="panel">
                     <h2 class="text-xl mb-4 text-center font-semibold text-gray-300">Работа</h2>
                     <input type="range" id="work-range" min="1" max="12" value="6" oninput="updateWorkInfo(this.value)">
-                    <div id="info-pay" class="text-center text-green-400 font-bold mb-4">+360 ₴</div>
+                    <div class="bg-[#1a202c] rounded-lg p-4 mb-4 text-sm space-y-2">
+                        <div class="flex justify-between text-green-400"><span>Зарплата:</span><span id="info-pay" class="font-bold">+360 ₴</span></div>
+                        <div class="flex justify-between text-orange-400"><span>Голод:</span><span id="info-hunger" class="font-bold">-24%</span></div>
+                        <div class="flex justify-between text-blue-400"><span>Жажда:</span><span id="info-water" class="font-bold">-42%</span></div>
+                        <div class="flex justify-between text-purple-400"><span>Усталость:</span><span id="info-fatigue" class="font-bold">+48%</span></div>
+                    </div>
                     <button id="work-btn" class="bg-green-700 w-full py-3 rounded-lg font-bold" onclick="handleWork()">Начать</button>
                 </div>`;
         }
 
         function updateWorkInfo(val) {
             document.getElementById('info-pay').innerText = `+${val * 60} ₴`;
+            document.getElementById('info-hunger').innerText = `-${val * 4}%`;
+            document.getElementById('info-water').innerText = `-${val * 7}%`;
+            document.getElementById('info-fatigue').innerText = `+${val * 8}%`;
             document.getElementById('work-btn').disabled = (val * 60) > gameState.freeTimeMinutes;
         }
 
         function handleWork() {
             const hours = parseInt(document.getElementById('work-range').value);
-            if ((hours * 60) > gameState.freeTimeMinutes) return;
+            const timeNeeded = hours * 60;
+            if (timeNeeded > gameState.freeTimeMinutes) return;
             
-            checkToiletConfusion();
-            applyDepletionPenalty();
-            if (checkHealthStatus()) return;
-
             gameState.money += hours * 60;
             gameState.stats.fatigue = Math.min(100, gameState.stats.fatigue + (hours * 8));
             gameState.stats.hunger = Math.max(0, gameState.stats.hunger - (hours * 4));
-            gameState.stats.water = Math.max(0, gameState.stats.water - (hours * 7)); 
-            gameState.freeTimeMinutes -= (hours * 60);
+            gameState.stats.water = Math.max(0, gameState.stats.water - (hours * 7));
+            gameState.stats.toilet = Math.min(100, gameState.stats.toilet + (hours * 5));
+            gameState.freeTimeMinutes -= timeNeeded;
+            
+            applyDepletionPenalty();
+            checkToiletIncident();
             
             saveGame();
             if (!checkHealthStatus()) switchTab(1);
@@ -552,18 +472,18 @@
                 const canAfford = gameState.money >= item.price;
                 itemsHtml += `
                     <div class="item-card">
-                        <div class="flex-1"><div class="font-bold text-xs">${item.name}</div></div>
+                        <div class="flex-1 text-xs"><div class="font-bold">${item.name}</div></div>
                         <button class="btn-buy" ${canAfford ? '' : 'disabled'} onclick="buyItem('${gameState.shopCategory}', ${index})">${item.price} ₴</button>
                     </div>`;
             });
-
-            return `<div class="panel">
-                <div class="flex mb-4 border-b border-gray-600">
-                    <div class="category-tab ${gameState.shopCategory === 'food' ? 'active' : ''}" onclick="setCategory('food')">Еда</div>
-                    <div class="category-tab ${gameState.shopCategory === 'drinks' ? 'active' : ''}" onclick="setCategory('drinks')">Вода</div>
-                </div>
-                ${itemsHtml}
-            </div>`;
+            return `
+                <div class="panel">
+                    <div class="flex mb-4 border-b border-gray-600">
+                        <div class="category-tab ${gameState.shopCategory === 'food' ? 'active' : ''}" onclick="setCategory('food')">Еда</div>
+                        <div class="category-tab ${gameState.shopCategory === 'drinks' ? 'active' : ''}" onclick="setCategory('drinks')">Вода</div>
+                    </div>
+                    <div class="max-h-64 overflow-y-auto">${itemsHtml}</div>
+                </div>`;
         }
 
         function setCategory(cat) { gameState.shopCategory = cat; switchTab(3); }
@@ -571,25 +491,104 @@
         function buyItem(type, index) {
             const item = type === 'food' ? foodMenu[index] : drinkMenu[index];
             if (gameState.money < item.price) return;
-            checkToiletConfusion();
-            applyDepletionPenalty();
-            if (checkHealthStatus()) return;
-
+            
             gameState.money -= item.price;
-            if (type === 'food') gameState.stats.hunger = Math.min(100, gameState.stats.hunger + item.hunger);
-            else gameState.stats.water = Math.min(100, gameState.stats.water + item.water);
+            if (type === 'food') {
+                gameState.stats.hunger = Math.min(100, gameState.stats.hunger + item.hunger);
+                gameState.stats.happiness = Math.min(100, gameState.stats.happiness + item.happiness);
+            } else {
+                gameState.stats.water = Math.min(100, gameState.stats.water + item.water);
+            }
             gameState.stats.toilet = Math.min(100, gameState.stats.toilet + item.toilet);
+            
+            applyDepletionPenalty();
+            checkToiletIncident();
+            
+            saveGame();
+            switchTab(3);
+        }
+
+        function renderHome() {
+            const daysLeft = gameState.rentDueDate - gameState.day;
+            return `
+                <div class="panel">
+                    <h2 class="text-xl mb-4 text-center font-semibold text-gray-300">Дом</h2>
+                    <div class="bg-[#1a202c] border border-blue-500/30 rounded-lg p-3 mb-4 text-xs">
+                        <div class="flex justify-between text-blue-300 mb-1"><span>Аренда:</span><span class="font-bold">${gameState.rentAmount} ₴</span></div>
+                        <div class="flex justify-between text-gray-400"><span>До оплаты:</span><span>${daysLeft} дн.</span></div>
+                    </div>
+                    <div class="space-y-3">
+                        <div class="item-card">
+                            <div class="flex-1">
+                                <div class="text-sm font-bold">Туалет (20 мин.)</div>
+                                <div class="text-[10px] text-gray-400">Сброс шкалы нужды</div>
+                            </div>
+                            <button class="btn-action" onclick="goToilet()">Идти</button>
+                        </div>
+                        <div class="bg-gray-800 p-3 rounded-lg">
+                            <p class="text-center text-xs text-blue-300 font-bold mb-3 uppercase tracking-wider">Сон</p>
+                            <div class="flex gap-2">
+                                <button class="flex-1 bg-indigo-800 hover:bg-indigo-700 text-[10px] py-3 rounded-md font-bold" onclick="goToSleep(4)">
+                                    КОРОТКИЙ<br>(4ч, -40% уст)
+                                </button>
+                                <button class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-[10px] py-3 rounded-md font-bold" onclick="goToSleep(8)">
+                                    ПОЛНЫЙ<br>(8ч, -100% уст)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        function goToilet() {
+            if (gameState.freeTimeMinutes < 20) return;
+            gameState.freeTimeMinutes -= 20;
+            gameState.stats.toilet = 0;
+            saveGame();
+            switchTab(4);
+        }
+
+        function goToSleep(type) {
+            // Урон от переутомления перед сном
+            if (gameState.stats.fatigue >= 100) {
+                gameState.stats.health = Math.max(0, gameState.stats.health - 5);
+                showMessage("Урон от переутомления -5% ХП");
+            }
+
+            gameState.day += 1;
+            gameState.freeTimeMinutes = 16 * 60;
+            
+            // Расход статов за ночь
+            gameState.stats.hunger = Math.max(0, gameState.stats.hunger - 20);
+            gameState.stats.water = Math.max(0, gameState.stats.water - 25);
+
+            if (type === 4) {
+                gameState.stats.fatigue = Math.max(0, gameState.stats.fatigue - 40);
+            } else {
+                gameState.stats.fatigue = 0;
+                gameState.stats.happiness = Math.min(100, gameState.stats.happiness + 10);
+            }
+
+            // Проверка аренды
+            if (gameState.day > gameState.rentDueDate) {
+                if (gameState.money >= gameState.rentAmount) {
+                    gameState.money -= gameState.rentAmount;
+                    gameState.rentDueDate += 30;
+                } else {
+                    if (checkHealthStatus("eviction")) return;
+                }
+            }
 
             saveGame();
-            if (!checkHealthStatus()) switchTab(3);
+            if (!checkHealthStatus()) switchTab(1);
         }
 
         function switchTab(id) {
-            if (gameState.stats.health <= 0) return;
             gameState.currentTab = id;
             document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-            const tabs = [document.getElementById('tab-1'), document.getElementById('tab-2'), document.getElementById('tab-3'), document.getElementById('tab-4')];
-            if (tabs[id-1]) tabs[id-1].classList.add('active');
+            const tabBtn = document.getElementById(`tab-${id}`);
+            if (tabBtn) tabBtn.classList.add('active');
+            
             const display = document.getElementById('display-area');
             if (id === 1) display.innerHTML = renderStats();
             else if (id === 2) { display.innerHTML = renderWork(); updateWorkInfo(6); }
@@ -599,6 +598,7 @@
 
         window.onload = () => {
             loadGame();
+            checkUpdate();
             switchTab(1);
         };
     </script>
